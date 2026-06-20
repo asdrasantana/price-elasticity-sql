@@ -53,13 +53,14 @@ Using `psql`:
 \copy olist_products_dataset FROM 'path/to/olist_products_dataset.csv' DELIMITER ',' CSV HEADER;
 \copy olist_category_name_translation FROM 'path/to/product_category_name_translation.csv' DELIMITER ',' CSV HEADER;
 ```
+> **Note:** Replace `'path/to/...'` with the actual file path where you saved the CSV files on your machine before running the commands above.
 > In DBeaver, right-click each table → **Import Data** → select the corresponding CSV.
 
 ### 5. Run the analysis
 ```sql
 \i analysis.sql
 ```
-Or open `analysis.sql` in your SQL client and run it directly. The final query returns PED (Price Elasticity of Demand) results by category, ranked by sensitivity.
+Or open `analysis.sql` in your SQL client and run it directly. The final query returns PED (Price Elasticity of Demand) results by month and category, ranked by sensitivity.
 
 ### Expected output
 
@@ -69,15 +70,18 @@ Or open `analysis.sql` in your SQL client and run it directly. The final query r
 | 2018-03-01 | garden_tools | ... | ... | ... | ... | -28.66 | elastic |
 
 ## SQL Query Architecture
-The analytical pipeline was built using sequentially linked CTEs to ensure clean data transformation:
+The analytical pipeline in `analysis.sql` was built using sequentially linked CTEs to ensure clean data transformation:
 1. **`olist` (Monthly Aggregation):** Extracts monthly order volumes and average prices per product.
 2. **`product` (Categorization & Translation):** Normalizes product categories and maps them from Portuguese to English using `COALESCE` to handle missing descriptions as `'other / uncategorized'`.
 3. **`prev` (Time-Series Mapping):** Uses the `LAG()` window function partitioned by product to fetch the previous month's metrics.
 4. **`percent` (Delta Calculation):** Computes the percentage change in quantity demanded ($\% \Delta Q$) and price ($\% \Delta P$), safely handling division-by-zero risks with `NULLIF`.
 
+> This same CTE structure (`olist` → `product` → `prev` → `percent`) is reused as the foundation for the aggregated analysis in [`robustness_check.sql`](./robustness_check.sql), which adds a `final_ped` layer to summarize PED distribution per category.
+
 ## Economic Interpretation
 
-### 1. Understanding Sensitivity Classifications
+### 1. Sensitivity Classifications
+The `sensitivity` column in `analysis.sql` classifies each monthly observation as follows:
 * **Elastic ($\text{PED} > 1$):** Highly price-sensitive products. Small price increases lead to sharp drops in order volume. *Strategy:* Highly responsive to promotions, discounts, and flash sales.
 * **Inelastic ($\text{PED} < 1$):** Price-resilient products. Demand drops proportionally less than the price increase. *Strategy:* Ideal for profit margin optimization and gradual price adjustments.
 * **Unit Elastic ($\text{PED} = 1$):** The percentage change in price matches the percentage change in quantity exactly. Revenue remains constant.
@@ -87,12 +91,13 @@ Records resulting in `NULL` values for `ped` and `sensitivity` are normal behavi
 * **Price Stability:** When the average price remains unchanged month-over-month, the price delta ($\% \Delta P$) is $0$. To prevent division-by-zero errors, the code uses `NULLIF()`, resulting in a `NULL` calculation. This means no price stimulus occurred to test consumer reaction.
 * **Discontinuous History:** Products without consecutive monthly sales cannot establish a continuous historical baseline, which naturally limits time-series elasticity modeling.
 
-
 ## Key Insights
 
 ### 1. Empirical Findings
-* **Highest Positive Elasticity:** The `health_beauty` category registered a peak PED of `42.75`. 
-* **Highest Negative Elasticity:** The `garden_tools` category registered a peak PED of `-28.66`.
+Based on the monthly observations in `analysis.sql`:
+* **Highest Positive Elasticity:** The `health_beauty` category registered a peak PED of `42.75` in a single month. 
+* **Highest Negative Elasticity:** The `garden_tools` category registered a peak PED of `-28.66` in a single month.
+> As discussed in the [Robustness Check](#3-robustness-check-peak-vs-typical-behavior) section below, these are single-month peaks, not the category's average behavior.
 
 ### 2. Negative vs. Positive Elasticity
 
@@ -104,9 +109,21 @@ While both metrics indicate extreme price sensitivity (high absolute variance), 
   
 However, in a digital marketplace like Olist, this positive spike is an anomaly driven by **demand shocks and seasonality**. For health and beauty products, massive promotional campaigns (e.g., Black Friday, Mother's Day) or macroeconomic shifts often cause demand to skyrocket. Since the overall volume and market activity shift upward together during these periods, it creates an artificial positive elasticity effect where high demand bypasses traditional price barriers.
 
+## 3. Robustness Check: Peak vs. Typical Behavior
+
+While the core analysis is performed at a monthly granularity, the extreme PED values highlighted in the Key Insights section warrant a closer look. The reported peaks (`health_beauty` / $\text{PED} = 42.75$, `garden_tools` / $\text{PED} = -28.66$) are single monthly observations, not necessarily the category's typical behavior.
+
+To check whether these peaks are representative or isolated anomalies, an additional script (robustness_check.sql) aggregates the distribution of monthly PED values per category (mean, median, min, max, and standard deviation) across all qualifying observations.
+
+This is not a replacement for the monthly analysis, it's a **validation layer** applied to it.
+
+A single extreme month, driven by a promotional event or seasonal demand shock, can create a misleading impression that a category is consistently hyper-elastic. In practice, the median PED for most categories tends to sit much closer to the `[-1, 1]` range typical of real-world price sensitivity, meaning the extreme peaks reported above should be read as outlier events worth investigating, not as the category's baseline elasticity.
+
+See `robustness_check.sql` for the full query.
+
 ## Outlier Treatment
 
-To prevent statistical noise, specific constraints were hardcoded into the final `WHERE` clause:
+To prevent statistical noise, the following constraints were hardcoded into the final `WHERE` clause of `analysis.sql`:
 
 1. **`abs(percent_avg_price) > 0.02`:** Month-over-month price fluctuations of just a few cents yield percentage variations near zero ($\% \Delta P \approx 0$). When acting as the denominator in the PED formula ($\frac{\% \Delta Q}{\% \Delta P}$), it causes an artificial mathematical explosion, yielding false elasticities in the thousands. This filter forces a minimum 2% price change baseline.
    
