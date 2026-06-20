@@ -17,6 +17,56 @@ The project specifically orchestrates and queries the following relational table
 * **SQL Client:** DBeaver
 * **Core Concepts:** Common Table Expressions (CTEs), Window Functions (`LAG`), Complex Conditional Logic (`CASE WHEN`), Data Cleansing (`NULLIF`, `ABS`, `COALESCE`).
 
+## How to Run
+
+### Prerequisites
+- PostgreSQL
+- A SQL client
+- The Olist dataset (downloaded from Kaggle)
+
+### 1. Download the dataset
+Download the **[Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)** from Kaggle
+
+Extract the CSV files. You'll need:
+- `olist_orders_dataset.csv`
+- `olist_order_items_dataset.csv`
+- `olist_products_dataset.csv`
+- `product_category_name_translation.csv`
+
+### 2. Create the database
+```sql
+CREATE DATABASE olist_ecommerce;
+```
+
+### 3. Create the tables
+Run `schema.sql` to set up the relational structure:
+```sql
+\i schema.sql
+```
+> In DBeaver, open `schema.sql` and execute it directly in the SQL editor.
+
+### 4. Import the CSV files
+Using `psql`:
+```sql
+\copy olist_orders_dataset FROM 'path/to/olist_orders_dataset.csv' DELIMITER ',' CSV HEADER;
+\copy olist_order_items_dataset FROM 'path/to/olist_order_items_dataset.csv' DELIMITER ',' CSV HEADER;
+\copy olist_products_dataset FROM 'path/to/olist_products_dataset.csv' DELIMITER ',' CSV HEADER;
+\copy olist_category_name_translation FROM 'path/to/product_category_name_translation.csv' DELIMITER ',' CSV HEADER;
+```
+> In DBeaver, right-click each table → **Import Data** → select the corresponding CSV.
+
+### 5. Run the analysis
+```sql
+\i analysis.sql
+```
+Or open `analysis.sql` in your SQL client and run it directly. The final query returns PED (Price Elasticity of Demand) results by category, ranked by sensitivity.
+
+### Expected output
+
+| month | product | order_count | avg_price | previous_order_count | previous_avg_price | ped | sensitivity |
+|---|---|---|---|---|---|---|---|
+| 2017-11-01 | health_beauty | ... | ... | ... | ... | 42.75 | elastic |
+| 2018-03-01 | garden_tools | ... | ... | ... | ... | -28.66 | elastic |
 
 ## SQL Query Architecture
 The analytical pipeline was built using sequentially linked CTEs to ensure clean data transformation:
