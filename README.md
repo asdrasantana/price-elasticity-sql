@@ -76,7 +76,7 @@ The analytical pipeline in `analysis.sql` was built using sequentially linked CT
 3. **`prev` (Time-Series Mapping):** Uses the `LAG()` window function partitioned by product to fetch the previous month's metrics.
 4. **`percent` (Delta Calculation):** Computes the percentage change in quantity demanded ($\% \Delta Q$) and price ($\% \Delta P$), safely handling division-by-zero risks with `NULLIF`.
 
-> This same CTE structure (`olist` → `product` → `prev` → `percent`) is reused as the foundation for the aggregated analysis in [`robustness_check.sql`](./robustness_check.sql), which adds a `final_ped` layer to summarize PED distribution per category.
+> This same CTE structure (`olist` → `product` → `prev` → `percent`) is reused as the foundation for the aggregated analysis in [`robustness-check.sql`](./robustness_check.sql), which adds a `final_ped` layer to summarize PED distribution per category.
 
 ## Economic Interpretation
 
@@ -119,7 +119,7 @@ This is not a replacement for the monthly analysis, it's a **validation layer** 
 
 A single extreme month, driven by a promotional event or seasonal demand shock, can create a misleading impression that a category is consistently hyper-elastic. In practice, the median PED for most categories tends to sit much closer to the `[-1, 1]` range typical of real-world price sensitivity, meaning the extreme peaks reported above should be read as outlier events worth investigating, not as the category's baseline elasticity.
 
-See `robustness_check.sql` for the full query.
+See `robustness-check.sql` for the full query.
 
 ## Outlier Treatment
 
